@@ -1,0 +1,80 @@
+name: Build
+on: push
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            name: Windows
+            cmd: |
+              mv build/windows/x64/release/*.dll upload/
+              mv build/windows/arm64/release/*.dll upload/arm/
+          - os: ubuntu-latest
+            name: Linux
+            cmd: |
+              mv build/linux/x86_64/release/*.so upload/
+              mv build/linux/arm64/release/*.so upload/arm/
+          - os: macos-13
+            name: MacOS
+            cmd: mv build/macosx/x86_64/release/*.dylib upload/
+          - os: macos-14
+            name: MacOS (ARM64)
+            cmd: mv build/macosx/arm64/release/*.dylib upload/arm/
+
+    name: Build ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install LLVM and Clang
+        uses: hackermdch/install-llvm-action@master
+        with:
+          arm: ${{ matrix.os == 'macos-14' }}
+
+      - name: Install xmake
+        uses: xmake-io/github-action-setup-xmake@v1
+        with:
+          xmake-version: branch@master
+
+      - name: Build MacOS
+        if: contains(matrix.os, 'macos')
+        run: |
+          xmake f --toolchain=llvm -y
+          xmake -y
+
+      - name: Build Linux
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt update
+          sudo apt install gcc-multilib 
+          sudo apt install g++-multilib
+          sudo apt install g++-aarch64-linux-gnu
+          xmake f --toolchain=llvm --sdk="${{ env.LLVM_PATH }}" --cxflags="--target=aarch64-linux-elf" --shflags="--target=aarch64-linux-elf" --ldflags="--target=aarch64-linux-elf" -a arm64 -yc
+          xmake -y
+          xmake f --toolchain=llvm --sdk="${{ env.LLVM_PATH }}" -yc
+          xmake -y
+
+      - name: Build Windows
+        if: matrix.os == 'windows-latest'
+        run: |
+          xmake f --toolchain=llvm --sdk="${{ env.LLVM_PATH }}" -y
+          xmake -y
+          xmake f --toolchain=llvm --sdk="${{ env.LLVM_PATH }}" --cxflags="--target=aarch64-win32-msvc" --shflags="--target=aarch64-win32-msvc" --ldflags="--target=aarch64-win32-msvc" -a arm64 -yc
+          xmake -y
+
+      - name: Move Files
+        run: |
+          mkdir upload
+          mkdir upload/arm
+          ${{matrix.cmd}}
+
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: libs
+          path: upload/
