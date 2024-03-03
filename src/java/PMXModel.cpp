@@ -96,6 +96,7 @@ jobject PMXModel::GetTextures(JNIEnv* env, const jobject obj)
 	for (int i = 0; i < count; i++) set.emplace(materials[i].m_texture);
 	for (auto& t : set)
 	{
+		if (t.empty()) continue;
 		list.call<void>("add(Ljava/lang/Object;)Z", file.newInstance(t));
 		pmx->textures.emplace_back(t);
 	}
@@ -118,7 +119,12 @@ void PMXModel::MappingVertices(JNIEnv* env, const jobject obj)
 	std::unordered_set<uint32_t> cache;
 	{
 		int i = 0;
-		for (auto& t : pmx->textures) map[t] = i++;
+		for (auto& t : pmx->textures)
+		{
+			if (t.empty()) continue;
+			map[t] = i++;
+		}
+		map[""] = -1;
 	}
 	for (int i = 0; i < count; i++)
 	{
