@@ -94,7 +94,7 @@ namespace jni
 		inline std::string valueSig(const wchar_t*) { return "C"; }
 		inline std::string valueSig(const short*) { return "S"; }
 		inline std::string valueSig(const int*) { return "I"; }
-		inline std::string valueSig(const long long*) { return "J"; }
+		inline std::string valueSig(const jlong*) { return "J"; }
 		inline std::string valueSig(const float*) { return "F"; }
 		inline std::string valueSig(const double*) { return "D"; }
 		inline std::string valueSig(const std::string*) { return "Ljava/lang/String;"; }
