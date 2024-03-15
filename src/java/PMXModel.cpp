@@ -65,14 +65,19 @@ void PMXModel::Render(JNIEnv* env, const jobject obj, const jobject buff, const 
 	auto count = pmx->model->GetIndexCount();
 	auto indexSize = pmx->model->GetIndexElementSize();
 	auto indices = pmx->model->GetIndices();
-	auto positions = pmx->model->GetUpdatePositions();
+	auto positions = (glm::vec3*)pmx->model->GetUpdatePositions();
+	auto normals = (glm::vec<3, byte_t>*)pmx->model->GetUpdateNormals();
 	auto uvs = pmx->model->GetUVs();
+	auto vc = pmx->model->GetVertexCount();
+	for (int i = 0; i < vc; i++)
+	{
+		normals[i] = glm::vec<3, byte_t>(glm::vec<3, int>(clamp(normal * positions[i], -1.f, 1.f) * 127.f) & 0xff);
+		positions[i] = matrix * glm::vec4(positions[i], 1);
+	}
 	for (int i = 0; i < count; i++)
 	{
 		auto index = ReadIndex(indices, i, indexSize);
-		auto pos = matrix * glm::vec4(positions[index], 1);
-		auto nv = glm::vec<3, byte_t>(glm::vec<3, int>(clamp(normal * positions[index], -1.f, 1.f) * 127.f) & 0xff);
-		*(glm::vec3*)buf = pos;
+		*(glm::vec3*)buf = positions[index];
 		buf += sizeof(glm::vec3);
 		*(uint32_t*)buf = 0xffffffff;
 		buf += sizeof(int);
@@ -80,7 +85,7 @@ void PMXModel::Render(JNIEnv* env, const jobject obj, const jobject buff, const 
 		buf += sizeof(glm::vec2);
 		*(jlong*)buf = *(jlong*)(cb + 100);
 		buf += sizeof(jlong);
-		*(decltype(nv)*)buf = nv;
+		*(decltype(normals))buf = normals[index];
 		buf += sizeof(int) + padding;
 	}
 }
