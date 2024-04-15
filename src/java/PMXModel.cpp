@@ -62,31 +62,39 @@ void PMXModel::Render(JNIEnv* env, const jobject obj, const jobject buff, const 
 	auto normal = *(glm::mat3*)(cb + 64);
 	auto padding = *(int*)(cb + 108);
 	auto pmx = (const PMXModel*)self.get<jlong>("ptr");
-	auto count = pmx->model->GetIndexCount();
 	auto indexSize = pmx->model->GetIndexElementSize();
 	auto indices = pmx->model->GetIndices();
 	auto positions = (glm::vec3*)pmx->model->GetUpdatePositions();
 	auto normals = (glm::vec<3, byte_t>*)pmx->model->GetUpdateNormals();
 	auto uvs = pmx->model->GetUVs();
 	auto vc = pmx->model->GetVertexCount();
+	auto meshs = pmx->model->GetSubMeshes();
+	auto mc = pmx->model->GetSubMeshCount();
+	auto mats = pmx->model->GetMaterials();
 	for (int i = 0; i < vc; i++)
 	{
 		normals[i] = glm::vec<3, byte_t>(glm::vec<3, int>(clamp(normal * positions[i], -1.f, 1.f) * 127.f) & 0xff);
 		positions[i] = matrix * glm::vec4(positions[i], 1);
 	}
-	for (int i = 0; i < count; i++)
+	for (int i = 0; i < mc; i++)
 	{
-		auto index = ReadIndex(indices, i, indexSize);
-		*(glm::vec3*)buf = positions[index];
-		buf += sizeof(glm::vec3);
-		*(uint32_t*)buf = 0xffffffff;
-		buf += sizeof(int);
-		*(glm::vec2*)buf = uvs[index];
-		buf += sizeof(glm::vec2);
-		*(jlong*)buf = *(jlong*)(cb + 100);
-		buf += sizeof(jlong);
-		*(decltype(normals))buf = normals[index];
-		buf += sizeof(int) + padding;
+		auto& mesh = meshs[i];
+		auto& mat = mats[mesh.m_materialID];
+		byte_t color[] = { static_cast<byte_t>(mat.m_diffuse.r * 255),static_cast<byte_t>(mat.m_diffuse.g * 255),static_cast<byte_t>(mat.m_diffuse.b * 255),static_cast<byte_t>(mat.m_alpha * 255) };
+		for (int j = mesh.m_beginIndex; j < mesh.m_beginIndex + mesh.m_vertexCount; j++)
+		{
+			auto index = ReadIndex(indices, j, indexSize);
+			*(glm::vec3*)buf = positions[index];
+			buf += sizeof(glm::vec3);
+			*(uint32_t*)buf = *(uint32_t*)color;
+			buf += sizeof(uint32_t);
+			*(glm::vec2*)buf = uvs[index];
+			buf += sizeof(glm::vec2);
+			*(jlong*)buf = *(jlong*)(cb + 100);
+			buf += sizeof(jlong);
+			*(decltype(normals))buf = normals[index];
+			buf += sizeof(uint32_t) + padding;
+		}
 	}
 }
 
