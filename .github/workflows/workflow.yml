@@ -44,7 +44,7 @@ jobs:
       - name: Build MacOS
         if: contains(matrix.os, 'macos')
         run: |
-          xmake f --toolchain=llvm -y
+          xmake f --toolchain=llvm --sdk="${{ env.LLVM_PATH }}" -y
           xmake -y
 
       - name: Build Linux

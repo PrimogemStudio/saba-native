@@ -6,7 +6,6 @@ module;
 #include <unordered_map>
 #include <saba/Model/MMD/PMXModel.h>
 #include <saba/Model/MMD/VMDAnimation.h>
-#include "saba/Base/Log.h"
 module MMD;
 
 using namespace MMD;
