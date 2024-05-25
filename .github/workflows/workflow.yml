@@ -10,17 +10,13 @@ jobs:
             name: Windows
             cmd: |
               mv build/windows/x64/release/*.dll upload/
-              mv build/windows/arm64/release/*.dll upload/arm/
           - os: ubuntu-latest
             name: Linux
             cmd: |
               mv build/linux/x86_64/release/*.so upload/
               mv build/linux/arm64/release/*.so upload/arm/
-          - os: macos-13
-            name: MacOS
-            cmd: mv build/macosx/x86_64/release/*.dylib upload/
           - os: macos-14
-            name: MacOS (ARM64)
+            name: MacOS
             cmd: mv build/macosx/arm64/release/*.dylib upload/arm/
 
     name: Build ${{ matrix.name }}
@@ -42,7 +38,7 @@ jobs:
           xmake-version: branch@master
 
       - name: Build MacOS
-        if: contains(matrix.os, 'macos')
+        if: ${{ matrix.os == 'macos-14' }}
         run: |
           xmake f --toolchain=llvm --sdk="${{ env.LLVM_PATH }}" -y
           xmake -y
@@ -63,8 +59,6 @@ jobs:
         if: matrix.os == 'windows-latest'
         run: |
           xmake f --toolchain=llvm --sdk="${{ env.LLVM_PATH }}" -y
-          xmake -y
-          xmake f --toolchain=llvm --sdk="${{ env.LLVM_PATH }}" --cxflags="--target=aarch64-win32-msvc" --shflags="--target=aarch64-win32-msvc" --ldflags="--target=aarch64-win32-msvc" -a arm64 -yc
           xmake -y
 
       - name: Move Files
