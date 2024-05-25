@@ -681,6 +681,12 @@ namespace jni
 			return call<TReturn>(method);
 		}
 
+		template <class TReturn>
+		TReturn call(const char* name, const char* sig) const {
+			method_t method = getStaticMethod(name, sig);
+			return call<TReturn>(method);
+		}
+
 		/**
 			Calls a static method on this Class and supplies the given arguments.
 			Note that the return type should be explicitly stated in the function

@@ -6,6 +6,7 @@ module;
 #include <unordered_map>
 #include <saba/Model/MMD/PMXModel.h>
 #include <saba/Model/MMD/VMDAnimation.h>
+#include "saba/Base/Log.h"
 module MMD;
 
 using namespace MMD;
@@ -14,13 +15,29 @@ using namespace jni;
 int PMXModel::RegisterMethods(JNIEnv* env)
 {
 	const auto native = env->FindClass("com/primogemstudio/advancedfmk/mmd/PMXModel");
-	JNINativeMethod methods[5];
+	JNINativeMethod methods[8];
 	methods[0] = JNIMethod("load", "(Ljava/io/File;)V", Load);
 	methods[1] = JNIMethod("render", "(Ljava/nio/ByteBuffer;Ljava/nio/ByteBuffer;)V", Render);
 	methods[2] = JNIMethod("getTextures", "()Ljava/util/List;", GetTextures);
 	methods[3] = JNIMethod("mappingVertices", "()V", MappingVertices);
 	methods[4] = JNIMethod("getVertexCount", "()I", GetVertexCount);
-	return env->RegisterNatives(native, methods, 5);
+	methods[5] = JNIMethod("getIndices", "()Ljava/nio/ByteBuffer;", GetIndices);
+	methods[6] = JNIMethod("release", "(J)V", Release);
+	methods[7] = JNIMethod("getIndexCount", "()I", GetIndexCount);
+	return env->RegisterNatives(native, methods, 8);
+}
+
+static uint32_t ReadIndex(const void* indices, const int offset, const size_t size)
+{
+	switch (size) {
+	default:
+	case 1:
+		return *((const uint8_t*)indices + offset);
+	case 2:
+		return *((const uint16_t*)indices + offset);
+	case 4:
+		return *((const uint32_t*)indices + offset);
+	}
 }
 
 void PMXModel::Load(JNIEnv* env, const jobject obj, const jobject arg)
@@ -38,18 +55,29 @@ void PMXModel::Load(JNIEnv* env, const jobject obj, const jobject arg)
 	}
 	model->model = std::move(pmx);
 	self.set("ptr", (jlong)model);
-}
-
-static uint32_t ReadIndex(const void* indices, const int offset, const size_t size)
-{
-	switch (size) {
-	default:
-	case 1:
-		return *((const uint8_t*)indices + offset);
-	case 2:
-		return *((const uint16_t*)indices + offset);
-	case 4:
-		return *((const uint32_t*)indices + offset);
+	model->indices.resize(model->model->GetIndexCount());
+	model->colors.resize(model->model->GetVertexCount());
+	for (int i = 0; i < model->indices.size(); i++)
+	{
+		model->indices[i] = ReadIndex(model->model->GetIndices(), i, model->model->GetIndexElementSize());
+	}
+	auto meshs = model->model->GetSubMeshes();
+	auto mc = model->model->GetSubMeshCount();
+	auto mats = model->model->GetMaterials();
+	std::vector<bool> cache(model->colors.size());
+	for (int i = 0; i < mc; i++)
+	{
+		auto& mesh = meshs[i];
+		auto& mat = mats[mesh.m_materialID];
+		glm::vec<4, uint8_t> color = { static_cast<byte_t>(mat.m_diffuse.r * 255),static_cast<byte_t>(mat.m_diffuse.g * 255),static_cast<byte_t>(mat.m_diffuse.b * 255),static_cast<byte_t>(mat.m_alpha * 255) };
+		for (int j = mesh.m_beginIndex; j < mesh.m_beginIndex + mesh.m_vertexCount; j++)
+		{
+			if (auto index = model->indices[j]; !cache[index])
+			{
+				model->colors[index] = color;
+				cache[index] = true;
+			}
+		}
 	}
 }
 
@@ -62,39 +90,21 @@ void PMXModel::Render(JNIEnv* env, const jobject obj, const jobject buff, const 
 	auto normal = *(glm::mat3*)(cb + 64);
 	auto padding = *(int*)(cb + 108);
 	auto pmx = (const PMXModel*)self.get<jlong>("ptr");
-	auto indexSize = pmx->model->GetIndexElementSize();
-	auto indices = pmx->model->GetIndices();
 	auto positions = (glm::vec3*)pmx->model->GetUpdatePositions();
-	auto normals = (glm::vec<3, byte_t>*)pmx->model->GetUpdateNormals();
 	auto uvs = pmx->model->GetUVs();
 	auto vc = pmx->model->GetVertexCount();
-	auto meshs = pmx->model->GetSubMeshes();
-	auto mc = pmx->model->GetSubMeshCount();
-	auto mats = pmx->model->GetMaterials();
 	for (int i = 0; i < vc; i++)
 	{
-		normals[i] = glm::vec<3, byte_t>(glm::vec<3, int>(clamp(normal * positions[i], -1.f, 1.f) * 127.f) & 0xff);
-		positions[i] = matrix * glm::vec4(positions[i], 1);
-	}
-	for (int i = 0; i < mc; i++)
-	{
-		auto& mesh = meshs[i];
-		auto& mat = mats[mesh.m_materialID];
-		byte_t color[] = { static_cast<byte_t>(mat.m_diffuse.r * 255),static_cast<byte_t>(mat.m_diffuse.g * 255),static_cast<byte_t>(mat.m_diffuse.b * 255),static_cast<byte_t>(mat.m_alpha * 255) };
-		for (int j = mesh.m_beginIndex; j < mesh.m_beginIndex + mesh.m_vertexCount; j++)
-		{
-			auto index = ReadIndex(indices, j, indexSize);
-			*(glm::vec3*)buf = positions[index];
-			buf += sizeof(glm::vec3);
-			*(uint32_t*)buf = *(uint32_t*)color;
-			buf += sizeof(uint32_t);
-			*(glm::vec2*)buf = uvs[index];
-			buf += sizeof(glm::vec2);
-			*(jlong*)buf = *(jlong*)(cb + 100);
-			buf += sizeof(jlong);
-			*(decltype(normals))buf = normals[index];
-			buf += sizeof(uint32_t) + padding;
-		}
+		*(glm::vec3*)buf = matrix * glm::vec4(positions[i], 1);
+		buf += sizeof(glm::vec3);
+		*(uint32_t*)buf = *(uint32_t*)&pmx->colors[i];
+		buf += sizeof(uint32_t);
+		*(glm::vec2*)buf = uvs[i];
+		buf += sizeof(glm::vec2);
+		*(jlong*)buf = *(jlong*)(cb + 100);
+		buf += sizeof(jlong);
+		*(glm::vec<3, byte_t>*)buf = glm::vec<3, byte_t>(glm::vec<3, int>(clamp(normal * positions[i], -1.f, 1.f) * 127.f) & 0xff);
+		buf += sizeof(uint32_t) + padding;
 	}
 }
 
@@ -127,7 +137,9 @@ void PMXModel::MappingVertices(JNIEnv* env, const jobject obj)
 	auto count = pmx->model->GetSubMeshCount();
 	auto indexSize = pmx->model->GetIndexElementSize();
 	auto uvs = (glm::vec2*)pmx->model->GetUVs();
-	auto buff = (glm::vec2*)env->GetDirectBufferAddress(atlas.get<Object>("buff", "Ljava/nio/ByteBuffer;").getHandle());
+	glm::vec2 uv;
+	Object buff = env->NewDirectByteBuffer(&uv, sizeof(glm::vec2));
+	buff.call<void>("order(Ljava/nio/ByteOrder;)Ljava/nio/ByteBuffer;", Class("java/nio/ByteOrder").call<Object>("nativeOrder", "()Ljava/nio/ByteOrder;"));
 	std::unordered_map<std::string, int> map;
 	std::unordered_set<uint32_t> cache;
 	{
@@ -148,9 +160,9 @@ void PMXModel::MappingVertices(JNIEnv* env, const jobject obj)
 		{
 			auto index = ReadIndex(indices, j + m.m_beginIndex, indexSize);
 			if (cache.contains(index)) continue;
-			*buff = uvs[index];
-			atlas.call<void>("mapping(I)V", tid);
-			uvs[index] = *buff;
+			uv = uvs[index];
+			atlas.call<void>("mapping(ILjava/nio/ByteBuffer;)V", tid, buff);
+			uvs[index] = uv;
 			cache.emplace(index);
 		}
 	}
@@ -158,5 +170,21 @@ void PMXModel::MappingVertices(JNIEnv* env, const jobject obj)
 
 jint PMXModel::GetVertexCount(JNIEnv* env, const jobject self)
 {
-	return ((PMXModel*)Object(self).get<jlong>("ptr"))->model->GetIndexCount();
+	return ((PMXModel*)Object(self).get<jlong>("ptr"))->model->GetVertexCount();
+}
+
+jint PMXModel::GetIndexCount(JNIEnv* env, const jobject obj)
+{
+	return ((PMXModel*)Object(obj).get<jlong>("ptr"))->indices.size();
+}
+
+jobject PMXModel::GetIndices(JNIEnv* env, const jobject self)
+{
+	auto model = (PMXModel*)Object(self).get<jlong>("ptr");
+	return env->NewDirectByteBuffer(model->indices.data(), model->indices.size() * sizeof(int));
+}
+
+void PMXModel::Release(JNIEnv* env, jclass cls, const jlong ptr)
+{
+	delete (PMXModel*)ptr;
 }
