@@ -16,7 +16,7 @@ int PMXModel::RegisterMethods(JNIEnv* env)
 	const auto native = env->FindClass("com/primogemstudio/advancedfmk/mmd/PMXModel");
 	JNINativeMethod methods[8];
 	methods[0] = JNIMethod("load", "(Ljava/io/File;)V", Load);
-	methods[1] = JNIMethod("render", "(Ljava/nio/ByteBuffer;Ljava/nio/ByteBuffer;)V", Render);
+	methods[1] = JNIMethod("render", "(JLjava/nio/ByteBuffer;)V", Render);
 	methods[2] = JNIMethod("getTextures", "()Ljava/util/List;", GetTextures);
 	methods[3] = JNIMethod("mappingVertices", "()V", MappingVertices);
 	methods[4] = JNIMethod("getVertexCount", "()I", GetVertexCount);
@@ -80,10 +80,10 @@ void PMXModel::Load(JNIEnv* env, const jobject obj, const jobject arg)
 	}
 }
 
-void PMXModel::Render(JNIEnv* env, const jobject obj, const jobject buff, const jobject constants)
+void PMXModel::Render(JNIEnv* env, const jobject obj, const jlong buff, const jobject constants)
 {
 	Object self(obj);
-	auto buf = (byte_t*)env->GetDirectBufferAddress(buff);
+	auto buf = (byte_t*)buff;
 	auto cb = (char*)env->GetDirectBufferAddress(constants);
 	auto matrix = *(glm::mat4*)cb;
 	auto normal = *(glm::mat3*)(cb + 64);

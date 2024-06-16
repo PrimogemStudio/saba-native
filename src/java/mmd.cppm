@@ -19,7 +19,7 @@ export namespace MMD
 
 		static int RegisterMethods(JNIEnv* env);
 		static void Load(JNIEnv* env, jobject obj, jobject file);
-		static void Render(JNIEnv* env, jobject obj, jobject buff, jobject constants);
+		static void Render(JNIEnv* env, jobject obj, jlong buff, jobject constants);
 		static jobject GetTextures(JNIEnv* env, jobject obj);
 		static void MappingVertices(JNIEnv* env, jobject obj);
 		static jint GetVertexCount(JNIEnv* env, jobject obj);
