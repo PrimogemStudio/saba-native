@@ -14,10 +14,9 @@ jobs:
             name: Linux
             cmd: |
               mv build/linux/x86_64/release/*.so upload/
-              mv build/linux/arm64/release/*.so upload/arm/
           - os: macos-14
             name: MacOS
-            cmd: mv build/macosx/arm64/release/*.dylib upload/arm/
+            cmd: mv build/macosx/arm64/release/*.dylib upload/
 
     name: Build ${{ matrix.name }}
     runs-on: ${{ matrix.os }}
@@ -50,8 +49,6 @@ jobs:
           sudo apt install gcc-multilib 
           sudo apt install g++-multilib
           sudo apt install g++-aarch64-linux-gnu
-          xmake f --toolchain=llvm --sdk="${{ env.LLVM_PATH }}" --cxflags="--target=aarch64-linux-elf" --shflags="--target=aarch64-linux-elf" --ldflags="--target=aarch64-linux-elf" -a arm64 -yc
-          xmake -y
           xmake f --toolchain=llvm --sdk="${{ env.LLVM_PATH }}" -yc
           xmake -y
 
@@ -64,7 +61,6 @@ jobs:
       - name: Move Files
         run: |
           mkdir upload
-          mkdir upload/arm
           ${{matrix.cmd}}
 
       - name: Upload Artifacts
