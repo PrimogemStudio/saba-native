@@ -1,0 +1,70 @@
+name: Build
+on: [push, pull_request]
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            name: Windows
+            cmd: |
+              mv build/windows/x64/release/*.dll upload/
+          - os: ubuntu-latest
+            name: Linux
+            cmd: |
+              mv build/linux/x86_64/release/*.so upload/
+          - os: macos-14
+            name: MacOS
+            cmd: mv build/macosx/arm64/release/*.dylib upload/
+
+    name: Build ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install LLVM and Clang
+        uses: hackermdch/install-llvm-action@master
+        with:
+          arm: ${{ matrix.os == 'macos-14' }}
+
+      - name: Install xmake
+        uses: xmake-io/github-action-setup-xmake@v1
+        with:
+          xmake-version: branch@master
+
+      - name: Build MacOS
+        if: ${{ matrix.os == 'macos-14' }}
+        run: |
+          xmake f --toolchain=llvm --sdk="${{ env.LLVM_PATH }}" -y
+          xmake -y
+
+      - name: Build Linux
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt update
+          sudo apt install gcc-multilib 
+          sudo apt install g++-multilib
+          sudo apt install g++-aarch64-linux-gnu
+          xmake f --toolchain=llvm --sdk="${{ env.LLVM_PATH }}" -yc
+          xmake -y
+
+      - name: Build Windows
+        if: matrix.os == 'windows-latest'
+        run: |
+          xmake f --toolchain=llvm --sdk="${{ env.LLVM_PATH }}" -y
+          xmake -y
+
+      - name: Move Files
+        run: |
+          mkdir upload
+          ${{matrix.cmd}}
+
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: libs
+          path: upload/
